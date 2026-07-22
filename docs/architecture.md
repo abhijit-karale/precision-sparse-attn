@@ -89,3 +89,80 @@ graph LR
     PSEL --> OUT_MUX
     OUT_MUX ==> RESULT
 ```
+
+## 3. Advanced SoC Integration & Memory Hierarchy (Datacenter / Edge-Server Scale)
+
+To support massive LLM parameters, the Precision-Scalable Sparse Attention Accelerator is designed to integrate seamlessly into a modern **Network-on-Chip (NoC)** ecosystem. The architecture employs standard **AXI4 memory-mapped interfaces** with multi-channel DMA engines to ensure the Fracturable MAC Array never starves for data.
+
+### 3.1 Clustered Accelerator Topology (Scale-Out Architecture)
+
+For datacenter-class NPU arrays, multiple Precision-Scalable Cores are clustered together. A unified L2 SRAM cache buffers the Q/K/V tensors, while a central Global Scheduler dispatches tiles to individual cores based on their current FSM idle states.
+
+```mermaid
+flowchart TB
+    classDef memory fill:#1E293B,stroke:#94A3B8,stroke-width:2px,color:#F8FAFC,rx:8px,ry:8px;
+    classDef core fill:#7F1D1D,stroke:#F87171,stroke-width:3px,color:#FEF2F2,rx:8px,ry:8px;
+    classDef noc fill:#0F172A,stroke:#38BDF8,stroke-width:3px,color:#38BDF8,rx:8px,ry:8px;
+    classDef ctrl fill:#064E3B,stroke:#34D399,stroke-width:2px,color:#D1FAE5,rx:8px,ry:8px;
+    
+    HBM["High Bandwidth Memory (HBM2e/3)\n[Multi-Terabyte Bandwidth]"]:::memory
+    
+    NOC{"Ring / Mesh Network-on-Chip (NoC)"}:::noc
+    
+    L2["Shared L2 SRAM Cache\n(Q/K/V Tensor Buffer)"]:::memory
+    SCHED["Global Hardware Scheduler\n(Tile Dispatcher)"]:::ctrl
+    
+    subgraph CoreCluster["Accelerator Compute Cluster"]
+        direction LR
+        CORE0["Sparse Attn Core 0\n(FSM + MAC)"]:::core
+        CORE1["Sparse Attn Core 1\n(FSM + MAC)"]:::core
+        CORE2["Sparse Attn Core 2\n(FSM + MAC)"]:::core
+        CORE3["Sparse Attn Core 3\n(FSM + MAC)"]:::core
+    end
+    
+    HBM <==>|AXI4 (1024-bit)| NOC
+    NOC <==>|AXI4| L2
+    
+    L2 -.-> SCHED
+    SCHED ==>|Dispatch Tile 0| CORE0
+    SCHED ==>|Dispatch Tile 1| CORE1
+    SCHED ==>|Dispatch Tile 2| CORE2
+    SCHED ==>|Dispatch Tile 3| CORE3
+    
+    CORE0 ==>|Writeback| L2
+    CORE1 ==>|Writeback| L2
+```
+
+### 3.2 High-Bandwidth AXI4 Data Fetch Pipeline
+
+The internal data mover utilizes a deeply pipelined AXI4 master interface to pre-fetch memory tiles while the FSM is actively computing the previous tile. This **Double-Buffering** strategy guarantees 100% utilization of the Fracturable MAC Array during dense attention blocks.
+
+```mermaid
+sequenceDiagram
+    participant HBM as Main Memory (HBM)
+    participant AXI as AXI4 DMA Engine
+    participant L1 as Local L1 Scratchpad
+    participant FSM as Unified Control FSM
+    participant MAC as MAC Array
+    
+    Note over AXI, FSM: Double-Buffering Mechanism
+    
+    AXI->>HBM: ARVALID (Address Read Tile 0)
+    HBM-->>AXI: RVALID (Burst Read Tile 0)
+    AXI->>L1: Store Tile 0 (Buffer A)
+    
+    FSM->>L1: Read Tile 0
+    FSM->>MAC: Compute Tile 0
+    
+    rect rgb(15, 23, 42)
+        Note right of AXI: Parallel Pre-fetch during Compute
+        AXI->>HBM: ARVALID (Address Read Tile 1)
+        HBM-->>AXI: RVALID (Burst Read Tile 1)
+        AXI->>L1: Store Tile 1 (Buffer B)
+    end
+    
+    MAC-->>L1: Writeback Tile 0 Result
+    
+    FSM->>L1: Read Tile 1 (No Stall)
+    FSM->>MAC: Compute Tile 1
+```
