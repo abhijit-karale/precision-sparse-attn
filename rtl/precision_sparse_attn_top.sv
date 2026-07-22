@@ -39,14 +39,17 @@ module precision_sparse_attn_top #(
     logic [MAC_LANES-1:0] skip_mask_w;
     logic [7:0]           score_est_w;
     logic [1:0]           precision_sel_w;
+    logic [1:0]           final_precision_w;
     logic [MAC_LANES-1:0] mac_en_w;
     logic [MAC_LANES-1:0] power_gate_w;
     logic [31:0]          mac_result_w [MAC_LANES];
     logic [31:0]          acc_out_w;
     logic                 overflow_flag_w;
+    logic [DATA_WIDTH-1:0] routed_data_w;
+    logic                 outlier_mask_w;
 
     // Output assignments for visibility
-    assign precision_sel_o = precision_sel_w;
+    assign precision_sel_o = final_precision_w;
     assign mac_en_o = mac_en_w;
     assign power_gate_o = power_gate_w;
     assign overflow_flag_o = overflow_flag_w;
@@ -91,6 +94,19 @@ module precision_sparse_attn_top #(
         .tile_done_o(tile_done_o)
     );
 
+    outlier_router #(
+        .DATA_WIDTH(DATA_WIDTH)
+    ) i_outlier_router (
+        .clk(clk),
+        .rst_n(rst_n),
+        .qkv_data_i(qkv_data_i),
+        .outlier_thresh_i(8'd200), // Hardcoded threshold for outlier detection
+        .base_precision_i(precision_sel_w),
+        .routed_data_o(routed_data_w),
+        .final_precision_o(final_precision_w),
+        .outlier_mask_o(outlier_mask_w)
+    );
+
     fracturable_mac_array #(
         .DATA_WIDTH(DATA_WIDTH),
         .MAC_LANES(MAC_LANES)
@@ -98,9 +114,9 @@ module precision_sparse_attn_top #(
         .clk(clk),
         .rst_n(rst_n),
         .mac_en_i(mac_en_w),
-        .precision_sel_i(precision_sel_w),
-        .q_data_i(qkv_data_i),  // simplified operand routing
-        .k_data_i(qkv_data_i),
+        .precision_sel_i(final_precision_w),
+        .q_data_i(routed_data_w),  // delayed/routed data
+        .k_data_i(routed_data_w),
         .mac_result_o(mac_result_w)
     );
 
@@ -110,7 +126,7 @@ module precision_sparse_attn_top #(
         .clk(clk),
         .rst_n(rst_n),
         .mac_result_i(mac_result_w),
-        .precision_sel_i(precision_sel_w),
+        .precision_sel_i(final_precision_w),
         .acc_out_o(acc_out_w),
         .overflow_flag_o(overflow_flag_w)
     );

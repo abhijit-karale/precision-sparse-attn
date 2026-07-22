@@ -113,6 +113,7 @@ module tb_precision_sparse_attn;
         for (int i=0; i<256; i++) begin
             qkv_mem[i] = i * 10; // some values
         end
+        qkv_mem[5] = 16'd250; // INJECT OUTLIER ( > 200)
 
         // Test 1: Basic dense FP16
         $display("[%0t] --- Test 1: Basic Dense FP16 ---", $time);
@@ -176,6 +177,16 @@ module tb_precision_sparse_attn;
             wait(tile_done_o);
             #20;
         end
+
+        // Test 6: Outlier-Aware Mixed-Precision (Hardware LLM.int8)
+        $display("[%0t] --- Test 6: Hardware Outlier Router (INT4 base with FP16 outlier) ---", $time);
+        sparsity_thresh_reg = 8'h00; // Dense
+        accuracy_target_reg = 2'b00; // Base precision INT4
+        start = 1;
+        #10 start = 0;
+        wait(tile_done_o);
+        $display("[%0t] Test 6 Completed. Outlier should have triggered FP16 dynamically.", $time);
+        #20;
 
         $display("All tests completed successfully.");
         $finish;

@@ -21,6 +21,7 @@ flowchart TB
         
         PREDICT["🔍 Sparsity Predictor\n(Magnitude Estimator)"]:::logic
         FSM["⚙️ Unified Control FSM\n(Precision & Sparsity Mgmt)"]:::control
+        ROUTER["🔀 Outlier Router\n(Hardware LLM.int8)"]:::logic
         MAC["🧮 Fracturable MAC Array\n(8-Lane Datapath)"]:::datapath
         ACCUM["➕ Error-Comp Accumulator\n(Saturation Logic)"]:::datapath
         SOFTMAX["📉 Approx Softmax"]:::logic
@@ -28,8 +29,11 @@ flowchart TB
         QKV -.->|Data Stream| PREDICT
         PREDICT -->|Score Estimate\nSkip Mask| FSM
         
-        FSM -->|Precision Select (2-bit)\nPower Gate (8-bit)| MAC
-        FSM -->|Precision Select| ACCUM
+        FSM -->|Base Precision Select\nPower Gate (8-bit)| ROUTER
+        
+        QKV ==>|Operands (Q, K, V)| ROUTER
+        ROUTER ==>|Final Precision\nRouted Operands| MAC
+        ROUTER -.->|Final Precision| ACCUM
         
         QKV ==>|Operands (Q, K, V)| MAC
         MAC ==>|MAC Result| ACCUM

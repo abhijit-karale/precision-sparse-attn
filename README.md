@@ -19,10 +19,13 @@ An inline magnitude estimator intercepts Q/K/V memory streams. If the operand fa
 ### 3. Fracturable MAC Array (Maximized Spatial Utilization)
 At the heart of the datapath lies an 8-lane **Fracturable Multiply-Accumulate (MAC) Array**. Based on the `precision_sel` signal from the FSM, the arithmetic logic instantly reconfigures to compute in high-fidelity FP16 or fractures into highly parallel INT8/INT4 operations to maximize throughput and data reuse.
 
-### 4. Dynamic Sparsity Power-Gating
+### 4. Hardware Outlier-Aware Router (LLM.int8)
+Modern LLMs can run mostly in INT4/INT8, but specific "outlier" tokens must be computed in FP16 to preserve accuracy. This IP block features an `outlier_router` that intercepts operands on the fly. If an outlier threshold is breached, it instantaneously routes the computation to the FP16 MAC lane while keeping the rest of the tile in low-power modes.
+
+### 5. Dynamic Sparsity Power-Gating
 Lanes flagged by the `skip_mask` are actively power-gated/clock-gated by the FSM. This halts internal toggle activity across the multipliers and adders, reducing dynamic power consumption to near-zero for sparse blocks.
 
-### 5. Error-Bounded Accumulation
+### 6. Error-Bounded Accumulation
 To maintain structural integrity during mid-tile transitions between datatypes (e.g., jumping from INT4 to FP16), the `err_comp_accumulator` handles precision-aware saturation and error-compensation before the final Softmax approximation.
 
 ---
@@ -33,6 +36,7 @@ To maintain structural integrity during mid-tile transitions between datatypes (
 ├── rtl/                        # Synthesizable SystemVerilog Source Files
 │   ├── err_comp_accumulator.sv # Saturation and accumulation logic
 │   ├── fracturable_mac_array.sv# Reconfigurable MAC datapath
+│   ├── outlier_router.sv       # Hardware LLM.int8() outlier detector
 │   ├── precision_ctrl_fsm.sv   # Unified FSM for precision & sparsity
 │   ├── precision_sparse_attn_top.sv # Top-level integration module
 │   ├── softmax_approx.sv       # Error-bounded approximation unit

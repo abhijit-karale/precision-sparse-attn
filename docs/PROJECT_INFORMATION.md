@@ -14,7 +14,10 @@ This project introduces a **unified hardware architecture** where sparsity detec
 ### 2.1 Sparsity Predictor (`sparsity_predictor.sv`)
 Acts as a magnitude estimator. It evaluates incoming Q/K/V data against a programmable `sparsity_thresh_reg`. If the estimated score falls below this threshold, it generates a `skip_mask` indicating which elements can be safely bypassed. This allows the system to execute an "early-exit" and avoid dispatching useless work to the MAC array.
 
-### 2.2 Unified Control FSM (`precision_ctrl_fsm.sv`)
+### 2.2 Outlier-Aware Mixed-Precision Router (`outlier_router.sv`)
+Inspired by the breakthroughs in the `LLM.int8()` quantization paper, this module intercepts the data stream before it reaches the MAC array. It detects "outlier" tokens—values whose magnitude exceeds a programmable threshold. While the FSM might dictate a baseline precision of INT4 or INT8 for power savings, the `outlier_router` will dynamically override this for outlier values, routing them exclusively to the high-fidelity FP16 lanes. This hardware-level outlier detection preserves model accuracy without relying on slow software-level branching.
+
+### 2.3 Unified Control FSM (`precision_ctrl_fsm.sv`)
 The brain of the accelerator. It operates a 7-stage pipeline (IDLE → LOAD → PREDICT → SELECT → COMPUTE → ACCUMULATE → WRITEBACK). It simultaneously ingests the `skip_mask` from the predictor and the `accuracy_target_reg` from the host. It ensures that precision switches only occur cleanly between tiles (pipeline draining) and instantly issues `power_gate` signals to disable inactive lanes based on the mask.
 
 ### 2.3 Fracturable MAC Array (`fracturable_mac_array.sv`)
